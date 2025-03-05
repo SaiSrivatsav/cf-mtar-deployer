@@ -1,0 +1,10 @@
+---
+applications:
+  - name: python-cf-deployer
+    memory: 256M
+    buildpacks:
+      - python_buildpack
+    command: |
+      bash cf-cli-install.sh
+      python app.py
+    path: .
