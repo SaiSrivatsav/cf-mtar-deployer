@@ -44,7 +44,7 @@ File (binary):
         ]
         subprocess.run(login_cmd, check=True)
         # 5) CF deploy (using the locally saved file)
-        deploy_cmd = ["cf", "deploy", local_filename]
+        deploy_cmd = ["cf", "deploy", local_filename, "-f"]
         subprocess.run(deploy_cmd, check=True)
         return jsonify({"status": "success", "message": "MTAR deployed successfully!"})
     except subprocess.CalledProcessError as e:
