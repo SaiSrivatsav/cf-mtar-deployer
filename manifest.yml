@@ -5,6 +5,5 @@ applications:
     buildpacks:
       - python_buildpack
     command: |
-      bash cf-cli-install.sh
-      python app.py
+      bash start.sh
     path: .

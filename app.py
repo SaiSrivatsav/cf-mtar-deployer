@@ -29,7 +29,7 @@ File (binary):
         return jsonify({"error": "No 'mtar' file provided"}), 400
     # 3) Save the uploaded file
     mtar_file = request.files["mtar"]  # <input name="mtar" ...>
-    local_filename = "uploaded.mtar"
+    local_filename = "zmje_0.0.1.mtar"
     mtar_file.save(local_filename)
     try:
         # 4) CF login
@@ -44,7 +44,7 @@ File (binary):
         ]
         subprocess.run(login_cmd, check=True)
         # 5) CF deploy (using the locally saved file)
-        deploy_cmd = ["cf", "deploy", local_filename, "--yes"]
+        deploy_cmd = ["cf", "deploy", local_filename]
         subprocess.run(deploy_cmd, check=True)
         return jsonify({"status": "success", "message": "MTAR deployed successfully!"})
     except subprocess.CalledProcessError as e:
