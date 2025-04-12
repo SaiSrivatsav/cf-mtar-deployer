@@ -1,36 +1,103 @@
 import os
 import subprocess
 from flask import Flask, request, jsonify
+from utils.helpers import fetch_file_from_github, get_destination_config
+import requests
+import logging
+import sys
 app = Flask(__name__)
+
+# Configure logging to stream to stdout (important for CF logs)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+app.logger.info("Flask app started")
+
+#Health Check endpoint
 @app.route("/")
 def health_check():
     return "Python CF Deployer is running."
+
+#Fetch file content from GIT repo
+@app.route("/getMtarFromGIT", methods=["GET"])
+def getMtarFromGIT():
+
+    git_pat_token = request.form.get("pat_token")
+    git_repo = request.form.get("repo")
+    git_owner = request.form.get("owner")
+    git_file_path = request.form.get("file_path")
+
+    headers = {
+        "Authorization": f"token {git_pat_token}",
+        "Accept": "application/vnd.github.v3.raw"
+    }
+    api_url = f"https://api.github.com/repos/{git_owner}/{git_repo}/contents/{git_file_path}"
+    print(f"GIT Fetch URL: {api_url}")
+    try:
+        response = requests.get(api_url, headers=headers)
+        if response.status_code == requests.codes.ok:
+            file_content = response.text
+            return jsonify({
+                "success": True, 
+                "file_content": file_content
+                }),200
+        else:
+            return jsonify({
+                "success": False, 
+                "error": f"Failed to fetch file. Status: {response.status_code}",
+                "details": response.text
+            }), response.status_code
+    except requests.exceptions.RequestException as e:
+        return jsonify({
+            "success": False, 
+            "error": str(e)
+            }), 500
+    
+#Deploy mtar script to a BTP subaccount space
 @app.route("/deploy", methods=["POST"])
 def deploy():
-    """
-    Expects multipart/form-data:
-Fields (text):
-          api_url, username, password, org, space
-File (binary):
-          mtar (the actual .mtar file)
-    Saves the uploaded mtar locally as 'uploaded.mtar'
-    Then runs 'cf deploy uploaded.mtar'
-    """
+
     # 1) Extract form fields
-    cf_api   = request.form.get("api_url")
-    cf_user  = request.form.get("username")
-    cf_pass  = request.form.get("password")
     cf_org   = request.form.get("org")
     cf_space = request.form.get("space")
-    if not all([cf_api, cf_user, cf_pass, cf_org, cf_space]):
+
+    git_pat_token = request.form.get("pat_token")
+    git_repo = request.form.get("repo")
+    git_owner = request.form.get("owner")
+    git_file_path = request.form.get("file_path")
+
+    if not all([cf_org, cf_space, git_pat_token, git_repo, git_owner, git_file_path]):
         return jsonify({"error": "Missing required form fields"}), 400
-    # 2) Check if file was provided
-    if "mtar" not in request.files:
-        return jsonify({"error": "No 'mtar' file provided"}), 400
-    # 3) Save the uploaded file
-    mtar_file = request.files["mtar"]  # <input name="mtar" ...>
-    local_filename = "zmje_0.0.1.mtar"
-    mtar_file.save(local_filename)
+
+#Fetch BTP Destination
+    try:
+        destination_name = "MTAR_DEPLOYER"
+        cf_destination = get_destination_config(destination_name)
+        cf_api = cf_destination["URL"]
+        cf_user = cf_destination["User"]
+        cf_pass = cf_destination["Password"]
+        
+        if not all([cf_api, cf_user, cf_pass]):
+            return jsonify({"error": "Missing required form fields from destination"}), 400
+    except Exception as e:
+        return jsonify({"error": f"Failed to get CF credentials from Destination: {str(e)}"}), 500
+#Fetch mtar from GIT Repo
+    try:
+        mtar_file = fetch_file_from_github(git_pat_token, git_repo, git_owner, git_file_path)
+    except Exception as e:
+        return jsonify({"status": "failure", "error": str(e)}), 500
+
+#Save MTAR locally
+    local_filename = "uploaded.mtar"
+    try:
+        with open(local_filename, "wb") as f:
+            f.write(mtar_file)
+    except IOError as io_err:
+        return jsonify({"status": "failure", "error": f"File write failed: {io_err}"}), 500
+    
+#Start deployment
     try:
         # 4) CF login
         login_cmd = [

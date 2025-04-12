@@ -4,6 +4,9 @@ applications:
     memory: 256M
     buildpacks:
       - python_buildpack
+    services:
+      - mtar_deploy-auth
+      - mtar-deploy-destination-srv
     command: |
       bash start.sh
     path: .
