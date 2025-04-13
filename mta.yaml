@@ -1,0 +1,30 @@
+_schema-version: "3.1"
+ID: python-cf-deployer
+version: 1.0.0
+description: "Python CF Deployer with XSUAA protection"
+
+modules:
+  - name: python-cf-deployer
+    type: python
+    path: .
+    parameters:
+      memory: 256M
+      buildpack: python_buildpack
+      command: bash start.sh
+    requires:
+      - name: mtar-auto-deployer-auth
+      - name: mtar-auto-deployer-dest-srv
+resources:
+  - name: mtar-auto-deployer-auth
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: xsuaa
+      service-plan: application
+      config:
+        xsappname: python-auth-app
+
+  - name: mtar-auto-deployer-dest-srv
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: destination
+      service-plan: lite
