@@ -24,7 +24,10 @@ def health_check():
 @app.route("/getMtarFromGIT", methods=["GET"])
 def getMtarFromGIT():
 
-    git_pat_token = request.form.get("pat_token")
+    git_pat_token = os.getenv("GITHUB_PAT")
+    if not git_pat_token:
+        return jsonify({"error": "GitHub PAT token not found"}), 500
+    # git_pat_token = request.form.get("pat_token")
     git_repo = request.form.get("repo")
     git_owner = request.form.get("owner")
     git_file_path = request.form.get("file_path")
@@ -63,7 +66,10 @@ def deploy():
     cf_org   = request.form.get("org")
     cf_space = request.form.get("space")
 
-    git_pat_token = request.form.get("pat_token")
+    git_pat_token = os.getenv("GITHUB_PAT")
+    if not git_pat_token:
+        return jsonify({"error": "GitHub PAT token not found"}),500
+    # git_pat_token = request.form.get("pat_token")
     git_repo = request.form.get("repo")
     git_owner = request.form.get("owner")
     git_file_path = request.form.get("file_path")
