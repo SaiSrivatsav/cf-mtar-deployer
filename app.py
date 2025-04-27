@@ -5,6 +5,7 @@ from utils.helpers import fetch_file_from_github, get_destination_config
 import requests
 import logging
 import sys
+import base64
 app = Flask(__name__)
 
 # Configure logging to stream to stdout (important for CF logs)
@@ -65,16 +66,14 @@ def deploy():
     # 1) Extract form fields
     cf_org   = request.form.get("org")
     cf_space = request.form.get("space")
-
     git_pat_token = os.getenv("GITHUB_PAT")
-    if not git_pat_token:
-        return jsonify({"error": "GitHub PAT token not found"}),500
-    # git_pat_token = request.form.get("pat_token")
     git_repo = request.form.get("repo")
     git_owner = request.form.get("owner")
-    git_file_path = request.form.get("file_path")
-
-    if not all([cf_org, cf_space, git_pat_token, git_repo, git_owner, git_file_path]):
+    artifactId = request.form.get("artifactId")
+    if not git_pat_token:
+        return jsonify({"error": "GitHub PAT token not found"}),500
+    
+    if not all([cf_org, cf_space, git_pat_token, git_repo, git_owner, artifactId]):
         return jsonify({"error": "Missing required form fields"}), 400
 
 #Fetch BTP Destination
@@ -91,7 +90,8 @@ def deploy():
         return jsonify({"error": f"Failed to get CF credentials from Destination: {str(e)}"}), 500
 #Fetch mtar from GIT Repo
     try:
-        mtar_file = fetch_file_from_github(git_pat_token, git_repo, git_owner, git_file_path)
+        mtar_file = fetch_file_from_github(git_pat_token, git_repo, git_owner, artifactId)
+        mtar_bytes = base64.b64decode(mtar_file)
     except Exception as e:
         return jsonify({"status": "failure", "error": str(e)}), 500
 
@@ -99,7 +99,7 @@ def deploy():
     local_filename = "uploaded.mtar"
     try:
         with open(local_filename, "wb") as f:
-            f.write(mtar_file)
+            f.write(mtar_bytes)
     except IOError as io_err:
         return jsonify({"status": "failure", "error": f"File write failed: {io_err}"}), 500
     

@@ -1,19 +1,47 @@
-import requests, os, json
+import requests, os, io, json, zipfile, base64
 from flask import current_app as app
 
 #Helper function - fetch file from github
-def fetch_file_from_github(git_pat_token, git_repo, git_owner, git_file_path):
+def fetch_file_from_github(git_pat_token, git_repo, git_owner, artifactId):
     headers = {
         "Authorization": f"token {git_pat_token}",
-        "Accept": "application/vnd.github.v3.raw"
+        "Accept": "application/vnd.github+json"
     }
-    api_url = f"https://api.github.com/repos/{git_owner}/{git_repo}/contents/{git_file_path}"
+    api_url = f"https://api.github.com/repos/{git_owner}/{git_repo}/actions/artifacts/{artifactId}"
     print(f"GIT Fetch URL: {api_url}")
 
     # Fetch file content
     response = requests.get(api_url, headers=headers)
     if response.status_code == requests.codes.ok:
-        return response.content
+
+        meta = response.json()
+        download_url = meta.get("archive_download_url")
+        if not download_url:
+            return jsonify(error="No download URL in metadata"), 500
+
+        #Download the ZIP 
+        zip_resp = requests.get(download_url,
+                                headers={"Authorization": f"Bearer {git_pat_token}"},
+                                allow_redirects=True)
+        if zip_resp.status_code != 200:
+            return jsonify(error="Failed to download artifact ZIP",
+                        details=zip_resp.text), zip_resp.status_code
+
+        # Unzip and extract the .mtar
+        buf = io.BytesIO(zip_resp.content)
+        try:
+            with zipfile.ZipFile(buf) as zf:
+                mtar_names = [n for n in zf.namelist() if n.endswith(".mtar")]
+                if not mtar_names:
+                    return jsonify(error="No .mtar file found"), 500
+                mtar_bytes = zf.read(mtar_names[0])
+        except zipfile.BadZipFile:
+            return jsonify(error="Downloaded file is not a ZIP"), 500
+
+        #Return base64-encoded .mtar
+        mtar_b64 = base64.b64encode(mtar_bytes).decode('ascii')
+
+        return mtar_b64
     else:
         raise ValueError(
         f"Failed to fetch file. Status: {response.status_code}\nDetails: {response.text}")
